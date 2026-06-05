@@ -28,7 +28,7 @@
 ## 使い方
 
 ```bash
-# 一番シンプル（縦書き・手書き風・文節で自動改行）→ bubble.png を出力
+# 一番シンプル（縦書き・手書き風・文節で自動改行）→ 日時名の PNG を出力
 # 既定で文節・句読点で自動改行し、縦横比を 3:5（横:縦）に近づける
 uv run speech_bubble.py "今日はいい天気ですね、散歩に行きましょう。"
 
@@ -77,7 +77,7 @@ uv run speech_bubble.py "うわあああ！" --shape jagged --tail bottom-right 
 | オプション | 説明 | 既定値 |
 |---|---|---|
 | `text`（位置引数） | 吹き出しに入れる日本語テキスト（`\n` で改行）。**省略するとクリップボードの文字列を使う** | （クリップボード） |
-| `-o, --output` | 出力ファイルパス | `bubble.png` |
+| `-o, --output` | 出力ファイルパス | 日時から自動命名（`bubble_YYYYMMDD-HHMMSS-fff.png`） |
 | `--shape` | 吹き出しの形：`ellipse` / `rounded` / `rectangle` / `jagged` / `burst` / `hand` | `hand` |
 | `--tail` | しっぽの向き：`bottom` / `bottom-left` / `bottom-right` / `top` / `top-left` / `top-right` / `left` / `right` / `none` | `bottom` |
 | `--tail-clock` | しっぽの位置を時計の時間で指定（`12`=上, `3`=右, `6`=下, `9`=左。`4.5` など小数可）。指定すると `--tail` より優先 | （未指定） |

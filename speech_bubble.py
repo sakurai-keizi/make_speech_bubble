@@ -27,6 +27,7 @@ import argparse
 import math
 import random
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -818,7 +819,8 @@ def parse_args(argv=None):
     )
     p.add_argument("text", nargs="?", default=None,
                    help="吹き出しに入れる日本語テキスト（\\n で改行）。省略時はクリップボードの文字列を使う")
-    p.add_argument("-o", "--output", default="bubble.png", help="出力ファイルパス")
+    p.add_argument("-o", "--output", default=None,
+                   help="出力ファイルパス（省略時は日時から bubble_YYYYMMDD-HHMMSS-fff.png を生成）")
     p.add_argument("--shape", default="hand",
                    choices=["ellipse", "rounded", "rectangle", "jagged", "burst", "hand"],
                    help="吹き出しの形（デフォルト=hand=手書き風）")
@@ -898,6 +900,11 @@ def main(argv=None) -> int:
     if random_seed:
         args.seed = random.randrange(1_000_000)
     img = build_image(args)
+    # 出力先未指定なら日時からユニークなファイル名を生成
+    if args.output is None:
+        now = datetime.now()
+        stamp = now.strftime("%Y%m%d-%H%M%S-") + f"{now.microsecond // 1000:03d}"
+        args.output = f"bubble_{stamp}.png"
     out = Path(args.output)
     img.save(out)
     msg = f"保存しました: {out}  ({img.width}x{img.height}, RGBA)"
