@@ -863,9 +863,9 @@ def parse_args(argv=None):
     p.add_argument("--break-penalty", type=float, default=0.15,
                    help="句読点以外での改行1回あたりのペナルティ（自動改行の探索に加算）。0で無効")
     p.add_argument("--line-width", type=int, default=4, help="輪郭線の太さ(px)")
-    p.add_argument("--padding", type=int, default=28, help="文字と縁の余白(px)")
+    p.add_argument("--padding", type=int, default=1, help="文字と縁の余白(px)")
     p.add_argument("--line-gap", type=float, default=1.1, help="横書きの行間倍率")
-    p.add_argument("--char-gap", type=float, default=1.15, help="縦書きの字間倍率")
+    p.add_argument("--char-gap", type=float, default=1.0, help="縦書きの字間倍率")
     p.add_argument("--col-gap", type=float, default=1.4, help="縦書きの列間倍率")
     # 手書き風(--shape hand)用
     p.add_argument("--seed", type=int, default=None,
