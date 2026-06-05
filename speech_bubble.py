@@ -14,6 +14,7 @@
     uv run speech_bubble.py "手書き風！" --shape hand --seed 3
     uv run speech_bubble.py "こっち！" --shape hand --tail-clock 1.5
     uv run speech_bubble.py "好きな書体で" --font /path/to/font.otf
+    uv run speech_bubble.py "強調！" --bold
 """
 from __future__ import annotations
 
@@ -98,6 +99,7 @@ def draw_horizontal(
     cy: int,
     line_gap: float,
     fill: tuple,
+    stroke: int = 0,
 ) -> None:
     ascent, descent = font.getmetrics()
     line_h = (ascent + descent) * line_gap
@@ -105,7 +107,8 @@ def draw_horizontal(
     y = cy - total_h / 2 + (line_h - (ascent + descent)) / 2
     for line in lines:
         w = draw.textlength(line, font=font)
-        draw.text((cx - w / 2, y), line, font=font, fill=fill)
+        draw.text((cx - w / 2, y), line, font=font, fill=fill,
+                  stroke_width=stroke, stroke_fill=fill)
         y += line_h
 
 
@@ -118,6 +121,7 @@ def draw_vertical(
     char_gap: float,
     col_gap: float,
     fill: tuple,
+    stroke: int = 0,
 ) -> None:
     size = font.size
     cell = size * char_gap
@@ -138,11 +142,12 @@ def draw_vertical(
             cw, chh = char_size(font, ch)
             if ch in VERTICAL_ROTATE:
                 # 1 文字を回転描画
-                pad = size
+                pad = size + stroke * 2
                 tmp = Image.new("RGBA", (pad, pad), (0, 0, 0, 0))
                 td = ImageDraw.Draw(tmp)
                 bb = font.getbbox(ch)
-                td.text((-bb[0], -bb[1]), ch, font=font, fill=fill)
+                td.text((-bb[0] + stroke, -bb[1] + stroke), ch, font=font, fill=fill,
+                        stroke_width=stroke, stroke_fill=fill)
                 tmp = tmp.rotate(-90, expand=False)
                 draw._image.paste(tmp, (int(x - pad / 2 + cell / 2), int(y)), tmp)
             else:
@@ -152,7 +157,8 @@ def draw_vertical(
                     dx += cell * 0.25
                     dy -= cell * 0.25
                 bb = font.getbbox(ch)
-                draw.text((dx - bb[0], dy - bb[1]), ch, font=font, fill=fill)
+                draw.text((dx - bb[0], dy - bb[1]), ch, font=font, fill=fill,
+                          stroke_width=stroke, stroke_fill=fill)
             y += cell
 
 
@@ -487,12 +493,21 @@ def build_image(args) -> Image.Image:
     draw_bubble(draw, bounds, args.shape, fill, outline, args.line_width, tail_pts,
                 {"seed": args.seed, "wobble": args.wobble, "strokes": args.strokes})
 
+    # 合成ボールド（文字の輪郭を太らせる）の太さ
+    if args.bold_width is not None:
+        stroke = args.bold_width
+    elif args.bold:
+        stroke = max(1, round(args.font_size * 0.045))
+    else:
+        stroke = 0
+
     cx = (bounds[0] + bounds[2]) / 2
     cy = (bounds[1] + bounds[3]) / 2
     if args.vertical:
-        draw_vertical(draw, columns, font, int(cx), int(cy), args.char_gap, args.col_gap, outline)
+        draw_vertical(draw, columns, font, int(cx), int(cy), args.char_gap, args.col_gap,
+                      outline, stroke)
     else:
-        draw_horizontal(draw, lines, font, int(cx), int(cy), args.line_gap, outline)
+        draw_horizontal(draw, lines, font, int(cx), int(cy), args.line_gap, outline, stroke)
 
     if args.trim:
         bbox = img.getbbox()
@@ -530,6 +545,10 @@ def parse_args(argv=None):
     p.add_argument("--font-index", type=int, default=0,
                    help="フォントコレクション(.ttc)内のフォント番号")
     p.add_argument("--font-size", type=int, default=48, help="フォントサイズ(px)")
+    p.add_argument("--bold", action="store_true",
+                   help="太字にする（文字の輪郭を太らせる合成ボールド。どのフォントでも有効）")
+    p.add_argument("--bold-width", type=int, default=None,
+                   help="太字の太さ(px)を直接指定（指定すると --bold より優先）")
     p.add_argument("--max-chars", type=int, default=8, help="1 行(列)の最大文字数")
     p.add_argument("--line-width", type=int, default=4, help="輪郭線の太さ(px)")
     p.add_argument("--padding", type=int, default=28, help="文字と縁の余白(px)")

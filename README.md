@@ -41,6 +41,9 @@ uv run speech_bubble.py "こっち！" --tail-clock 1.5
 uv run speech_bubble.py "好きな書体で" --font /path/to/font.otf
 uv run speech_bubble.py "明朝体で" --font /usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc --font-index 3
 
+# 太字にする（どのフォントでも有効。太さは --bold-width で微調整）
+uv run speech_bubble.py "強調！" --bold
+
 # 横書きにする（デフォルトは縦書き）
 uv run speech_bubble.py "なるほど…\nそういうことか" --horizontal
 
@@ -65,6 +68,8 @@ uv run speech_bubble.py "うわあああ！" --shape jagged --tail bottom-right 
 | `--font` | 使用するフォントファイル(`.ttf`/`.otf`/`.ttc`)のパス。未指定ならシステムの日本語フォントを自動検出 | （自動検出） |
 | `--font-index` | フォントコレクション(`.ttc`)内のフォント番号 | `0` |
 | `--font-size` | フォントサイズ(px) | `48` |
+| `--bold` | 太字にする（文字の輪郭を太らせる合成ボールド。どのフォントでも有効） | （通常） |
+| `--bold-width` | 太字の太さ(px)を直接指定（`--bold` より優先） | （自動） |
 | `--max-chars` | 1 行（列）の最大文字数で自動折り返し | `8` |
 | `--line-width` | 輪郭線の太さ(px) | `4` |
 | `--padding` | 文字と縁の余白(px) | `28` |
@@ -96,6 +101,7 @@ uv run speech_bubble.py "うわあああ！" --shape jagged --tail bottom-right 
 
 - **手書き風**: 楕円の輪郭を点列にし、整数次の正弦波（低周波ノイズ）で半径を揺らして「ゆらゆら」した閉曲線を作成。同じパスを少しずつズラして数回重ね描き（sketchy）することでペン入れ風の線にしています。`--seed` 未指定なら実行ごとにランダムな揺れになり（使ったシードは出力に表示）、`--seed <値>` で固定すると同じ絵を再現できます。
 - **継ぎ目なしのしっぽ**: 本体としっぽを別々に描くと付け根に境界線が出るため、本体輪郭のしっぽ付け根区間を削除し、しっぽ先端へ迂回させた **1 本の連続した閉路** として描画しています。
+- **太字 (`--bold`)**: 専用のボールド書体を必要とせず、文字を縁取り（`stroke_width`）して輪郭を太らせる合成ボールドで実現。どのフォントでも、縦書きの回転文字でも効きます。
 
 ## ライセンス
 
