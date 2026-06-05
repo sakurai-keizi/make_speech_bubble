@@ -45,8 +45,9 @@ FONT_CANDIDATES = [
 
 # 縦書きで 90 度回転させたい記号（長音符・各種ダッシュ・括弧など）
 VERTICAL_ROTATE = set("ー－—–~〜（）()「」『』【】〔〕[]｛｝{}…‥")
-# 縦書きで右上に寄せたい小書き文字・約物
-VERTICAL_SHIFT = set("、。，．")
+# 縦書きでマスの右上へ寄せたい文字（句読点＋小書き仮名：拗音・促音・小書き母音など）
+_SMALL_KANA = "ぁぃぅぇぉっゃゅょゎゕゖ" + "ァィゥェォッャュョヮヵヶ" + "ｧｨｩｪｫｬｭｮｯ"
+VERTICAL_SHIFT = set("、。，．" + _SMALL_KANA)
 
 
 def load_font(size: int, font_path: str | None = None, index: int = 0) -> ImageFont.FreeTypeFont:
