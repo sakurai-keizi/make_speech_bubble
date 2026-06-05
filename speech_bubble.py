@@ -6,10 +6,10 @@
 # ///
 """日本語テキストを漫画風の吹き出し画像（背景透過 PNG）にして出力する。
 
-使い方の例:
+使い方の例（デフォルトは縦書き）:
     uv run speech_bubble.py "こんにちは！"
     uv run speech_bubble.py "やったー！" -o out.png --shape ellipse
-    uv run speech_bubble.py "なるほど…" --vertical --shape jagged
+    uv run speech_bubble.py "なるほど…" --horizontal --shape jagged
     uv run speech_bubble.py "だめだ！" --tail bottom-left --font-size 64
     uv run speech_bubble.py "手書き風！" --shape hand --seed 3
     uv run speech_bubble.py "こっち！" --shape hand --tail-clock 1.5
@@ -521,7 +521,10 @@ def parse_args(argv=None):
     p.add_argument("--tail-clock", type=float, default=None,
                    help="しっぽの位置を時計の時間で指定（12=上, 3=右, 6=下, 9=左。例: 4.5）。--tail より優先")
     p.add_argument("--tail-scale", type=float, default=1.0, help="しっぽの大きさ倍率")
-    p.add_argument("--vertical", action="store_true", help="縦書きにする")
+    p.add_argument("--vertical", action=argparse.BooleanOptionalAction, default=True,
+                   help="縦書きにする（デフォルト）。横書きにするには --no-vertical または --horizontal")
+    p.add_argument("--horizontal", dest="vertical", action="store_false",
+                   help="横書きにする（--no-vertical と同じ）")
     p.add_argument("--font", default=None,
                    help="使用するフォントファイル(.ttf/.otf/.ttc)のパス。未指定ならシステムの日本語フォントを自動検出")
     p.add_argument("--font-index", type=int, default=0,

@@ -1,7 +1,7 @@
 # speech_bubble.py
 
 日本語テキストを漫画風の**吹き出し画像（背景透過 PNG）**にして出力する Python スクリプトです。
-横書き・縦書き、複数の吹き出し形状（楕円・角丸・四角・ギザギザ・手書き風）に対応しています。
+縦書き（デフォルト）・横書き、複数の吹き出し形状（楕円・角丸・四角・ギザギザ・手書き風）に対応しています。
 
 ![手書き風の吹き出し例](demo_hand.png)
 
@@ -25,7 +25,7 @@
 ## 使い方
 
 ```bash
-# 一番シンプル（横書き・楕円・下しっぽ）→ bubble.png を出力
+# 一番シンプル（縦書き・楕円・下しっぽ）→ bubble.png を出力
 uv run speech_bubble.py "こんにちは！"
 
 # 改行は \n で。出力先は -o で指定
@@ -41,8 +41,8 @@ uv run speech_bubble.py "こっち！" --shape hand --tail-clock 1.5
 uv run speech_bubble.py "好きな書体で" --font /path/to/font.otf
 uv run speech_bubble.py "明朝体で" --font /usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc --font-index 3
 
-# 縦書き
-uv run speech_bubble.py "なるほど…\nそういうことか" --vertical
+# 横書きにする（デフォルトは縦書き）
+uv run speech_bubble.py "なるほど…\nそういうことか" --horizontal
 
 # 叫び（ギザギザ）＋しっぽ右下＋フォント大きめ
 uv run speech_bubble.py "うわあああ！" --shape jagged --tail bottom-right --font-size 64
@@ -60,7 +60,8 @@ uv run speech_bubble.py "うわあああ！" --shape jagged --tail bottom-right 
 | `--tail` | しっぽの向き：`bottom` / `bottom-left` / `bottom-right` / `top` / `top-left` / `top-right` / `left` / `right` / `none` | `bottom` |
 | `--tail-clock` | しっぽの位置を時計の時間で指定（`12`=上, `3`=右, `6`=下, `9`=左。`4.5` など小数可）。指定すると `--tail` より優先 | （未指定） |
 | `--tail-scale` | しっぽの大きさ倍率 | `1.0` |
-| `--vertical` | 縦書きにする | （横書き） |
+| `--vertical` / `--no-vertical` | 縦書き／横書きの切替 | 縦書き |
+| `--horizontal` | 横書きにする（`--no-vertical` と同じ） | （縦書き） |
 | `--font` | 使用するフォントファイル(`.ttf`/`.otf`/`.ttc`)のパス。未指定ならシステムの日本語フォントを自動検出 | （自動検出） |
 | `--font-index` | フォントコレクション(`.ttc`)内のフォント番号 | `0` |
 | `--font-size` | フォントサイズ(px) | `48` |
