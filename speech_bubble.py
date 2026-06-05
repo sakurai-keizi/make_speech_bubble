@@ -12,6 +12,7 @@
     uv run speech_bubble.py "なるほど…" --vertical --shape jagged
     uv run speech_bubble.py "だめだ！" --tail bottom-left --font-size 64
     uv run speech_bubble.py "手書き風！" --shape hand --seed 3
+    uv run speech_bubble.py "こっち！" --shape hand --tail-clock 1.5
 """
 from __future__ import annotations
 
@@ -184,6 +185,57 @@ def tail_polygon(
     return []
 
 
+# 時計の文字盤と同じ向き（12=上, 3=右, 6=下, 9=左）。小数も可。
+def clock_to_theta(hour: float) -> float:
+    """時計の時間(1-12)を、真上から時計回りに測った角度[rad]に変換。"""
+    return (hour % 12) / 12.0 * 2 * math.pi
+
+
+def angular_tail_polygon(
+    bounds: tuple[float, float, float, float],
+    theta: float,
+    scale: float,
+) -> list[tuple[float, float]]:
+    """楕円の境界上から角度 theta 方向へ外向きに生やすしっぽ。任意角度に対応。"""
+    x0, y0, x1, y1 = bounds
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    rx, ry = (x1 - x0) / 2, (y1 - y0) / 2
+    w, h = x1 - x0, y1 - y0
+    tw = min(w, h) * 0.22 * scale
+    tl = min(w, h) * 0.225 * scale
+
+    dx, dy = math.sin(theta), -math.cos(theta)        # 外向きの単位ベクトル
+    # 中心から dx,dy 方向に伸ばした線が楕円と交わる点（しっぽの付け根）
+    t = 1.0 / math.hypot(dx / rx, dy / ry)
+    bx, by = cx + dx * t, cy + dy * t
+    px, py = -dy, dx                                  # 付け根の幅方向（接線）
+    return [(bx + px * tw / 2, by + py * tw / 2),
+            (bx - px * tw / 2, by - py * tw / 2),
+            (bx + dx * tl, by + dy * tl)]
+
+
+# 名前付きの向き → 吹き出しを寄せる方向（しっぽ用の余白を作るためだけの近似ベクトル）
+NAMED_TAIL_DIR = {
+    "bottom": (0.0, 1.0), "bottom-left": (-0.45, 1.0), "bottom-right": (0.45, 1.0),
+    "top": (0.0, -1.0), "top-left": (-0.45, -1.0), "top-right": (0.45, -1.0),
+    "left": (-1.0, 0.0), "right": (1.0, 0.0),
+}
+
+
+def resolve_tail(args, bounds):
+    """しっぽの点列 [base0, base1, tip] と外向き単位ベクトルを返す。無しなら ([], None)。"""
+    if args.tail_clock is not None:
+        theta = clock_to_theta(args.tail_clock)
+        pts = angular_tail_polygon(bounds, theta, args.tail_scale)
+        return pts, (math.sin(theta), -math.cos(theta))
+    if args.tail == "none":
+        return [], None
+    pts = tail_polygon(bounds, args.tail, args.tail_scale)
+    dx, dy = NAMED_TAIL_DIR[args.tail]
+    n = math.hypot(dx, dy)
+    return pts, (dx / n, dy / n)
+
+
 def draw_bubble(
     draw: ImageDraw.ImageDraw,
     bounds: tuple[float, float, float, float],
@@ -191,20 +243,18 @@ def draw_bubble(
     fill: tuple,
     outline: tuple,
     line_width: int,
-    tail: str,
-    tail_scale: float,
+    tail_pts: list,
     opts: dict,
 ) -> None:
     x0, y0, x1, y1 = bounds
 
     if shape == "hand":
         # 手描き風は専用ルーチンで本体もしっぽもまとめて描く
-        draw_hand_bubble(draw, bounds, fill, outline, line_width, tail,
-                         tail_scale, opts["seed"], opts["wobble"], opts["strokes"])
+        draw_hand_bubble(draw, bounds, fill, outline, line_width, tail_pts,
+                         opts["seed"], opts["wobble"], opts["strokes"])
         return
 
     # しっぽ（先に塗って、本体の縁取りで根元を隠す）
-    tail_pts = tail_polygon(bounds, tail, tail_scale) if tail != "none" else []
     if tail_pts:
         draw.polygon(tail_pts, fill=fill, outline=outline, width=line_width)
 
@@ -308,8 +358,7 @@ def draw_hand_bubble(
     fill: tuple,
     outline: tuple,
     line_width: int,
-    tail: str,
-    tail_scale: float,
+    tail_pts: list,
     seed: int,
     wobble: float,
     strokes: int,
@@ -322,7 +371,7 @@ def draw_hand_bubble(
 
     body = hand_outline(bounds, rng, body_wobble)
     # 本体としっぽを 1 本の連続した輪郭に合成（付け根に境界線が出ない）
-    path = merge_tail(body, bounds, tail, tail_scale)
+    path = merge_tail(body, bounds, tail_pts)
 
     # 塗りと、ペン入れ風の一筆書き輪郭
     draw.polygon(path, fill=fill)
@@ -332,16 +381,15 @@ def draw_hand_bubble(
 def merge_tail(
     body: list[tuple[float, float]],
     bounds: tuple[float, float, float, float],
-    tail: str,
-    tail_scale: float,
+    tail_pts: list,
 ) -> list[tuple[float, float]]:
     """本体輪郭のしっぽ付け根区間を取り除き、しっぽの先端へ迂回させた一本の閉路を返す。"""
-    if tail == "none":
+    if not tail_pts:
         return body
     x0, y0, x1, y1 = bounds
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
     rx, ry = (x1 - x0) / 2, (y1 - y0) / 2
-    base0, base1, tip = tail_polygon(bounds, tail, tail_scale)
+    base0, base1, tip = tail_pts
     n = len(body)
 
     def angle(p):
@@ -403,8 +451,10 @@ def build_image(args) -> Image.Image:
     bubble_w = max(bubble_w, args.font_size * 2)
     bubble_h = max(bubble_h, args.font_size * 2)
 
+    # しっぽの向き（時計指定 or 名前付き）を先に解決
+    has_tail = args.tail_clock is not None or args.tail != "none"
     # しっぽぶんの余白
-    tail_room = int(min(bubble_w, bubble_h) * 0.55) if args.tail != "none" else 0
+    tail_room = int(min(bubble_w, bubble_h) * 0.55) if has_tail else 0
     canvas_w = int(bubble_w + margin * 2 + tail_room)
     canvas_h = int(bubble_h + margin * 2 + tail_room)
 
@@ -413,21 +463,17 @@ def build_image(args) -> Image.Image:
 
     bx0 = (canvas_w - bubble_w) / 2
     by0 = (canvas_h - bubble_h) / 2
-    # しっぽの向きに応じて本体を少し寄せる
-    if args.tail.startswith("bottom"):
-        by0 -= tail_room / 2
-    elif args.tail.startswith("top"):
-        by0 += tail_room / 2
-    elif args.tail == "left":
-        bx0 += tail_room / 2
-    elif args.tail == "right":
-        bx0 -= tail_room / 2
+    # しっぽの向きと反対側へ本体を少し寄せて、しっぽぶんの余白を作る
+    _, tail_dir = resolve_tail(args, (bx0, by0, bx0 + bubble_w, by0 + bubble_h))
+    if tail_dir is not None:
+        bx0 -= tail_dir[0] * tail_room / 2
+        by0 -= tail_dir[1] * tail_room / 2
     bounds = (bx0, by0, bx0 + bubble_w, by0 + bubble_h)
 
     fill = (255, 255, 255, 255)
     outline = (0, 0, 0, 255)
-    draw_bubble(draw, bounds, args.shape, fill, outline, args.line_width, args.tail,
-                args.tail_scale,
+    tail_pts, _ = resolve_tail(args, bounds)
+    draw_bubble(draw, bounds, args.shape, fill, outline, args.line_width, tail_pts,
                 {"seed": args.seed, "wobble": args.wobble, "strokes": args.strokes})
 
     cx = (bounds[0] + bounds[2]) / 2
@@ -461,6 +507,8 @@ def parse_args(argv=None):
                    choices=["bottom", "bottom-left", "bottom-right",
                             "top", "top-left", "top-right", "left", "right", "none"],
                    help="しっぽの向き")
+    p.add_argument("--tail-clock", type=float, default=None,
+                   help="しっぽの位置を時計の時間で指定（12=上, 3=右, 6=下, 9=左。例: 4.5）。--tail より優先")
     p.add_argument("--tail-scale", type=float, default=1.0, help="しっぽの大きさ倍率")
     p.add_argument("--vertical", action="store_true", help="縦書きにする")
     p.add_argument("--font-size", type=int, default=48, help="フォントサイズ(px)")
