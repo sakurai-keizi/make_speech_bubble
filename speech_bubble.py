@@ -18,6 +18,7 @@
     uv run speech_bubble.py "強調！" --bold
     uv run speech_bubble.py "行数を指定" --lines 3
     uv run speech_bubble.py "自動改行を切る" --no-auto-wrap --max-chars 5
+    uv run speech_bubble.py "心の声…" --monologue
 """
 from __future__ import annotations
 
@@ -740,6 +741,11 @@ def build_image(args) -> Image.Image:
     font = load_font(args.font_size, args.font, args.font_index)
     margin = max(args.line_width * 3, int(args.font_size * 0.6)) + args.padding
 
+    # モノローグ: しっぽ無し＋内側を白に近い灰色に
+    if args.monologue:
+        args.tail = "none"
+        args.tail_clock = None
+
     # 行(列)の決定：行数指定 > 自動改行 > 手動の max-chars 折り返し
     if args.lines is not None:
         layout = layout_n_lines(args.text, args.lines, args.break_penalty)
@@ -772,7 +778,7 @@ def build_image(args) -> Image.Image:
         by0 -= tail_dir[1] * tail_room / 2
     bounds = (bx0, by0, bx0 + bubble_w, by0 + bubble_h)
 
-    fill = (255, 255, 255, 255)
+    fill = (240, 240, 240, 255) if args.monologue else (255, 255, 255, 255)
     outline = (0, 0, 0, 255)
     tail_pts, _ = resolve_tail(args, bounds)
     draw_bubble(draw, bounds, args.shape, fill, outline, args.line_width, tail_pts,
@@ -821,6 +827,8 @@ def parse_args(argv=None):
     p.add_argument("--tail-clock", type=float, default=None,
                    help="しっぽの位置を時計の時間で指定（12=上, 3=右, 6=下, 9=左。例: 4.5）。--tail より優先")
     p.add_argument("--tail-scale", type=float, default=1.0, help="しっぽの大きさ倍率")
+    p.add_argument("--monologue", action="store_true",
+                   help="モノローグ用：しっぽ無し＋内側を白に近い灰色にする")
     p.add_argument("--vertical", action=argparse.BooleanOptionalAction, default=True,
                    help="縦書きにする（デフォルト）。横書きにするには --no-vertical または --horizontal")
     p.add_argument("--horizontal", dest="vertical", action="store_false",
