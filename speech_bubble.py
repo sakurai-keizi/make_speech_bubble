@@ -43,8 +43,12 @@ FONT_CANDIDATES = [
     ("/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf", 0),
 ]
 
-# 縦書きで 90 度回転させたい記号（長音符・各種ダッシュ・括弧など）
-VERTICAL_ROTATE = set("ー－—–~〜（）()「」『』【】〔〕[]｛｝{}…‥")
+# 縦書きで 90 度回転させて置く記号。開きカッコは右上、閉じカッコは左下、
+# その他（長音符・ダッシュ・三点リーダー）は中央に配置する。
+VERTICAL_OPEN = set("（(「『【〔〈《｛{［[")
+VERTICAL_CLOSE = set("）)」』】〕〉》｝}］]")
+VERTICAL_DASH = set("ー－—–‐−~〜…‥")
+VERTICAL_ROTATE = VERTICAL_OPEN | VERTICAL_CLOSE | VERTICAL_DASH
 # 縦書きでマスの右上へ寄せたい文字（句読点＋小書き仮名：拗音・促音・小書き母音など）
 _SMALL_KANA = "ぁぃぅぇぉっゃゅょゎゕゖ" + "ァィゥェォッャュョヮヵヶ" + "ｧｨｩｪｫｬｭｮｯ"
 SMALL_KANA = set(_SMALL_KANA)
@@ -133,6 +137,13 @@ def render_glyph(ch, font, fill, stroke):
     return tmp, tmp.getbbox()
 
 
+def render_glyph_rotated(ch, font, fill, stroke):
+    """1 文字を 90 度回転して描き、(画像, 回転後の実インク外接矩形) を返す。"""
+    tmp, _ = render_glyph(ch, font, fill, stroke)
+    tmp = tmp.rotate(-90, expand=False)
+    return tmp, tmp.getbbox()
+
+
 def draw_vertical(
     draw: ImageDraw.ImageDraw,
     columns: list[str],
@@ -162,15 +173,19 @@ def draw_vertical(
         for ch in col:
             cw, chh = char_size(font, ch)
             if ch in VERTICAL_ROTATE:
-                # 1 文字を回転描画
-                pad = size + stroke * 2
-                tmp = Image.new("RGBA", (pad, pad), (0, 0, 0, 0))
-                td = ImageDraw.Draw(tmp)
-                bb = font.getbbox(ch)
-                td.text((-bb[0] + stroke, -bb[1] + stroke), ch, font=font, fill=fill,
-                        stroke_width=stroke, stroke_fill=fill)
-                tmp = tmp.rotate(-90, expand=False)
-                draw._image.paste(tmp, (int(x - pad / 2 + cell / 2), int(y)), tmp)
+                # 90 度回転し、開きカッコ=右上 / 閉じカッコ=左下 / その他=中央 に配置
+                tmp, ink = render_glyph_rotated(ch, font, fill, stroke)
+                if ink:
+                    iw, ih = ink[2] - ink[0], ink[3] - ink[1]
+                    ex0 = x - size / 2                 # マス（全角枠）の左上
+                    ey0 = y + (cell - size) / 2
+                    if ch in VERTICAL_OPEN:
+                        tx, ty = ex0 + size - iw, ey0          # 右上
+                    elif ch in VERTICAL_CLOSE:
+                        tx, ty = ex0, ey0 + size - ih          # 左下
+                    else:
+                        tx, ty = ex0 + (size - iw) / 2, ey0 + (size - ih) / 2  # 中央
+                    draw._image.paste(tmp, (int(tx - ink[0]), int(ty - ink[1])), tmp)
             elif ch in VERTICAL_SHIFT:
                 # 句読点は原稿用紙の作法で、マス（≒全角枠）の右上クォドラントへ
                 tmp, ink = render_glyph(ch, font, fill, stroke)
