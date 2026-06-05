@@ -2,6 +2,7 @@
 # requires-python = ">=3.9"
 # dependencies = [
 #   "Pillow>=10.0",
+#   "Janome>=0.5",
 # ]
 # ///
 """日本語テキストを漫画風の吹き出し画像（背景透過 PNG）にして出力する。
@@ -15,6 +16,7 @@
     uv run speech_bubble.py "こっち！" --shape hand --tail-clock 1.5
     uv run speech_bubble.py "好きな書体で" --font /path/to/font.otf
     uv run speech_bubble.py "強調！" --bold
+    uv run speech_bubble.py "今日はいい天気ですね、散歩に行きましょう。" --auto-wrap
 """
 from __future__ import annotations
 
@@ -434,39 +436,164 @@ def merge_tail(
 
 
 # ---------------------------------------------------------------------------
+# 文節解析にもとづく自動改行
+# ---------------------------------------------------------------------------
+_TOKENIZER = None
+
+
+def get_tokenizer():
+    global _TOKENIZER
+    if _TOKENIZER is None:
+        from janome.tokenizer import Tokenizer
+        _TOKENIZER = Tokenizer()
+    return _TOKENIZER
+
+
+def bunsetsu_split(text: str) -> list[str]:
+    """janome の形態素解析をもとに、文を文節（自立語＋付属語）へ分割する。
+
+    付属語（助詞・助動詞・接尾・非自立）は前の語にくっつけ、自立語の手前で区切る。
+    句読点・感嘆符などの直後では必ず区切る。
+    """
+    if not text:
+        return []
+    units: list[str] = []
+    cur = ""
+    prev_prefix = False  # 直前が接頭詞なら、続く自立語はくっつける（お＋菓子 など）
+    for tok in get_tokenizer().tokenize(text):
+        pos = tok.part_of_speech.split(",")
+        major, sub = pos[0], (pos[1] if len(pos) > 1 else "")
+        s = tok.surface
+        attach = (
+            major in ("助詞", "助動詞")
+            or sub in ("接尾", "非自立")
+            or prev_prefix
+        )
+        if major == "記号":
+            cur += s
+            if sub in ("句点", "読点") or s in "。、，．！？!?…―":
+                units.append(cur)
+                cur = ""
+        elif attach or not cur:
+            cur += s
+        else:
+            units.append(cur)
+            cur = s
+        prev_prefix = major == "接頭詞"
+    if cur:
+        units.append(cur)
+    return units
+
+
+def pack_units(para_units: list[list[str]], max_len: int) -> list[str]:
+    """文節リストを、1 行(列) max_len 文字以内になるよう貪欲に詰める。文節は分割しない。"""
+    lines: list[str] = []
+    for units in para_units:
+        if not units:
+            lines.append("")
+            continue
+        cur = ""
+        for u in units:
+            if cur and len(cur) + len(u) > max_len:
+                lines.append(cur)
+                cur = u
+            else:
+                cur += u
+        if cur:
+            lines.append(cur)
+    return lines or [""]
+
+
+def text_block_size(layout: list[str], args, font) -> tuple[float, float]:
+    """行(横書き) または 列(縦書き) のリストから、文字ブロックの幅・高さを返す。"""
+    if args.vertical:
+        size = args.font_size
+        text_w = size * args.col_gap * len(layout)
+        text_h = size * args.char_gap * max((len(c) for c in layout), default=1)
+    else:
+        ascent, descent = font.getmetrics()
+        line_h = (ascent + descent) * args.line_gap
+        text_h = line_h * len(layout)
+        tmp = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        text_w = max((tmp.textlength(l, font=font) for l in layout), default=1)
+    return text_w, text_h
+
+
+def bubble_box(text_w: float, text_h: float, args) -> tuple[float, float]:
+    """文字ブロックから吹き出し本体の幅・高さを求める。"""
+    pad = args.padding
+    if args.shape in ("ellipse", "jagged", "burst", "hand"):
+        bw, bh = text_w * 1.5 + pad * 2, text_h * 1.5 + pad * 2
+    else:
+        bw, bh = text_w + pad * 2, text_h + pad * 2
+    return max(bw, args.font_size * 2), max(bh, args.font_size * 2)
+
+
+def tail_unit_dir(args):
+    """しっぽの外向き単位ベクトル（bounds 不要版）。しっぽ無しなら None。"""
+    if args.tail_clock is not None:
+        th = clock_to_theta(args.tail_clock)
+        return (math.sin(th), -math.cos(th))
+    if args.tail == "none":
+        return None
+    dx, dy = NAMED_TAIL_DIR[args.tail]
+    n = math.hypot(dx, dy)
+    return (dx / n, dy / n)
+
+
+def predicted_canvas(text_w: float, text_h: float, args) -> tuple[float, float]:
+    """トリミング後の画像サイズの近似（縦横比の見積もり用）。"""
+    bw, bh = bubble_box(text_w, text_h, args)
+    d = tail_unit_dir(args)
+    if d is not None:
+        tl = min(bw, bh) * 0.225 * args.tail_scale
+        return bw + abs(d[0]) * tl, bh + abs(d[1]) * tl
+    return bw, bh
+
+
+def parse_aspect(s: str) -> float:
+    """\"横:縦\"（例 \"3:5\" は幅3・高さ5の縦長）または数値を、目標の 高さ/幅 比に変換する。"""
+    if ":" in s:
+        w, h = s.split(":")
+        return float(h) / float(w)
+    return float(s)
+
+
+def auto_layout(text: str, args, font) -> list[str]:
+    """文節で区切り、最終画像の縦横比が --aspect に最も近くなる折り返しを選ぶ。"""
+    target = parse_aspect(args.aspect)  # 縦/横
+    para_units = [bunsetsu_split(p) for p in text.split("\n")]
+    total = sum(len(u) for units in para_units for u in units)
+    if total == 0:
+        return [""]
+    best = None
+    for max_len in range(1, total + 1):
+        layout = pack_units(para_units, max_len)
+        tw, th = text_block_size(layout, args, font)
+        cw, ch = predicted_canvas(tw, th, args)
+        score = abs(ch / cw - target)
+        if best is None or score < best[0]:
+            best = (score, layout)
+    return best[1]
+
+
+# ---------------------------------------------------------------------------
 # メイン
 # ---------------------------------------------------------------------------
 def build_image(args) -> Image.Image:
     font = load_font(args.font_size, args.font, args.font_index)
-    pad = args.padding
     margin = max(args.line_width * 3, int(args.font_size * 0.6)) + args.padding
 
-    if args.vertical:
-        columns = wrap_vertical(args.text, args.max_chars)
-        size = args.font_size
-        cell = size * args.char_gap
-        col_w = size * args.col_gap
-        text_w = col_w * len(columns)
-        text_h = cell * max((len(c) for c in columns), default=1)
+    # 行(列)の決定：自動改行 or 手動の max-chars 折り返し
+    if args.auto_wrap:
+        layout = auto_layout(args.text, args, font)
+    elif args.vertical:
+        layout = wrap_vertical(args.text, args.max_chars)
     else:
-        lines = wrap_horizontal(args.text, args.max_chars)
-        ascent, descent = font.getmetrics()
-        line_h = (ascent + descent) * args.line_gap
-        text_h = line_h * len(lines)
-        # ダミー描画で幅計測
-        tmp = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-        text_w = max((tmp.textlength(l, font=font) for l in lines), default=1)
+        layout = wrap_horizontal(args.text, args.max_chars)
 
-    # 楕円・バースト・手描きは内接矩形より大きく要る
-    if args.shape in ("ellipse", "jagged", "burst", "hand"):
-        bubble_w = text_w * 1.5 + pad * 2
-        bubble_h = text_h * 1.5 + pad * 2
-    else:
-        bubble_w = text_w + pad * 2
-        bubble_h = text_h + pad * 2
-
-    bubble_w = max(bubble_w, args.font_size * 2)
-    bubble_h = max(bubble_h, args.font_size * 2)
+    text_w, text_h = text_block_size(layout, args, font)
+    bubble_w, bubble_h = bubble_box(text_w, text_h, args)
 
     # しっぽの向き（時計指定 or 名前付き）を先に解決
     has_tail = args.tail_clock is not None or args.tail != "none"
@@ -504,10 +631,10 @@ def build_image(args) -> Image.Image:
     cx = (bounds[0] + bounds[2]) / 2
     cy = (bounds[1] + bounds[3]) / 2
     if args.vertical:
-        draw_vertical(draw, columns, font, int(cx), int(cy), args.char_gap, args.col_gap,
+        draw_vertical(draw, layout, font, int(cx), int(cy), args.char_gap, args.col_gap,
                       outline, stroke)
     else:
-        draw_horizontal(draw, lines, font, int(cx), int(cy), args.line_gap, outline, stroke)
+        draw_horizontal(draw, layout, font, int(cx), int(cy), args.line_gap, outline, stroke)
 
     if args.trim:
         bbox = img.getbbox()
@@ -549,7 +676,11 @@ def parse_args(argv=None):
                    help="太字にする（文字の輪郭を太らせる合成ボールド。どのフォントでも有効）")
     p.add_argument("--bold-width", type=int, default=None,
                    help="太字の太さ(px)を直接指定（指定すると --bold より優先）")
-    p.add_argument("--max-chars", type=int, default=8, help="1 行(列)の最大文字数")
+    p.add_argument("--max-chars", type=int, default=8, help="1 行(列)の最大文字数（手動折り返し時）")
+    p.add_argument("--auto-wrap", action="store_true",
+                   help="文節・句読点で区切って自動改行し、画像の縦横比を --aspect に近づける")
+    p.add_argument("--aspect", default="3:5",
+                   help="自動改行時の目標縦横比（横:縦、例 3:5 は幅3・高さ5の縦長）。--auto-wrap と併用")
     p.add_argument("--line-width", type=int, default=4, help="輪郭線の太さ(px)")
     p.add_argument("--padding", type=int, default=28, help="文字と縁の余白(px)")
     p.add_argument("--line-gap", type=float, default=1.1, help="横書きの行間倍率")
