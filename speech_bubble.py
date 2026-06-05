@@ -6,7 +6,7 @@
 # ///
 """日本語テキストを漫画風の吹き出し画像（背景透過 PNG）にして出力する。
 
-使い方の例（デフォルトは縦書き）:
+使い方の例（デフォルトは縦書き・手書き風）:
     uv run speech_bubble.py "こんにちは！"
     uv run speech_bubble.py "やったー！" -o out.png --shape ellipse
     uv run speech_bubble.py "なるほど…" --horizontal --shape jagged
@@ -511,9 +511,9 @@ def parse_args(argv=None):
     )
     p.add_argument("text", help="吹き出しに入れる日本語テキスト（\\n で改行）")
     p.add_argument("-o", "--output", default="bubble.png", help="出力ファイルパス")
-    p.add_argument("--shape", default="ellipse",
+    p.add_argument("--shape", default="hand",
                    choices=["ellipse", "rounded", "rectangle", "jagged", "burst", "hand"],
-                   help="吹き出しの形（hand=手書き風）")
+                   help="吹き出しの形（デフォルト=hand=手書き風）")
     p.add_argument("--tail", default="bottom",
                    choices=["bottom", "bottom-left", "bottom-right",
                             "top", "top-left", "top-right", "left", "right", "none"],

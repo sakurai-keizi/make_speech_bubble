@@ -25,17 +25,17 @@
 ## 使い方
 
 ```bash
-# 一番シンプル（縦書き・楕円・下しっぽ）→ bubble.png を出力
+# 一番シンプル（縦書き・手書き風・下しっぽ）→ bubble.png を出力
 uv run speech_bubble.py "こんにちは！"
 
 # 改行は \n で。出力先は -o で指定
 uv run speech_bubble.py "こんにちは！\n元気ですか？" -o out.png
 
-# 手書き風
-uv run speech_bubble.py "こんにちは！\n元気ですか？" --shape hand --seed 3
+# 形を変える（楕円など）
+uv run speech_bubble.py "こんにちは！\n元気ですか？" --shape ellipse
 
 # しっぽの位置を時計の時間で指定（1.5時=右上）
-uv run speech_bubble.py "こっち！" --shape hand --tail-clock 1.5
+uv run speech_bubble.py "こっち！" --tail-clock 1.5
 
 # 好きなフォントを指定（.ttc はフォント番号も指定可）
 uv run speech_bubble.py "好きな書体で" --font /path/to/font.otf
@@ -56,7 +56,7 @@ uv run speech_bubble.py "うわあああ！" --shape jagged --tail bottom-right 
 |---|---|---|
 | `text`（位置引数） | 吹き出しに入れる日本語テキスト（`\n` で改行） | （必須） |
 | `-o, --output` | 出力ファイルパス | `bubble.png` |
-| `--shape` | 吹き出しの形：`ellipse` / `rounded` / `rectangle` / `jagged` / `burst` / `hand` | `ellipse` |
+| `--shape` | 吹き出しの形：`ellipse` / `rounded` / `rectangle` / `jagged` / `burst` / `hand` | `hand` |
 | `--tail` | しっぽの向き：`bottom` / `bottom-left` / `bottom-right` / `top` / `top-left` / `top-right` / `left` / `right` / `none` | `bottom` |
 | `--tail-clock` | しっぽの位置を時計の時間で指定（`12`=上, `3`=右, `6`=下, `9`=左。`4.5` など小数可）。指定すると `--tail` より優先 | （未指定） |
 | `--tail-scale` | しっぽの大きさ倍率 | `1.0` |
