@@ -17,6 +17,7 @@
     uv run speech_bubble.py "好きな書体で" --font /path/to/font.otf
     uv run speech_bubble.py "強調！" --bold
     uv run speech_bubble.py "今日はいい天気ですね、散歩に行きましょう。" --auto-wrap
+    uv run speech_bubble.py "今日はいい天気ですね、散歩に行きましょう。" --lines 3
 """
 from __future__ import annotations
 
@@ -577,6 +578,22 @@ def auto_layout(text: str, args, font) -> list[str]:
     return best[1]
 
 
+def layout_n_lines(text: str, n: int) -> list[str]:
+    """文節で区切り、指定した行数(縦書きでは列数) n に収まるよう均等に詰める。"""
+    para_units = [bunsetsu_split(p) for p in text.split("\n")]
+    total = sum(len(u) for units in para_units for u in units)
+    if total == 0:
+        return [""]
+    # 行数が n 以下になる最小の幅＝最もバランスの良い詰め方
+    chosen = pack_units(para_units, total)
+    for max_len in range(1, total + 1):
+        layout = pack_units(para_units, max_len)
+        if len(layout) <= n:
+            chosen = layout
+            break
+    return chosen
+
+
 # ---------------------------------------------------------------------------
 # メイン
 # ---------------------------------------------------------------------------
@@ -584,8 +601,10 @@ def build_image(args) -> Image.Image:
     font = load_font(args.font_size, args.font, args.font_index)
     margin = max(args.line_width * 3, int(args.font_size * 0.6)) + args.padding
 
-    # 行(列)の決定：自動改行 or 手動の max-chars 折り返し
-    if args.auto_wrap:
+    # 行(列)の決定：行数指定 > 自動改行 > 手動の max-chars 折り返し
+    if args.lines is not None:
+        layout = layout_n_lines(args.text, args.lines)
+    elif args.auto_wrap:
         layout = auto_layout(args.text, args, font)
     elif args.vertical:
         layout = wrap_vertical(args.text, args.max_chars)
@@ -681,6 +700,8 @@ def parse_args(argv=None):
                    help="文節・句読点で区切って自動改行し、画像の縦横比を --aspect に近づける")
     p.add_argument("--aspect", default="3:5",
                    help="自動改行時の目標縦横比（横:縦、例 3:5 は幅3・高さ5の縦長）。--auto-wrap と併用")
+    p.add_argument("--lines", type=int, default=None,
+                   help="行数（縦書きでは列数）を指定して文節で自動改行。指定すると --aspect より優先")
     p.add_argument("--line-width", type=int, default=4, help="輪郭線の太さ(px)")
     p.add_argument("--padding", type=int, default=28, help="文字と縁の余白(px)")
     p.add_argument("--line-gap", type=float, default=1.1, help="横書きの行間倍率")
