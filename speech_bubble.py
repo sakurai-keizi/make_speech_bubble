@@ -439,6 +439,9 @@ def merge_tail(
 # ---------------------------------------------------------------------------
 # 文節解析にもとづく自動改行
 # ---------------------------------------------------------------------------
+# 文節の区切りで、これらの直後は「句読点での自然な改行位置」とみなす
+BREAK_PUNCT = "。、，．！？!?…―"
+
 _TOKENIZER = None
 
 
@@ -472,7 +475,7 @@ def bunsetsu_split(text: str) -> list[str]:
         )
         if major == "記号":
             cur += s
-            if sub in ("句点", "読点") or s in "。、，．！？!?…―":
+            if sub in ("句点", "読点") or s in BREAK_PUNCT:
                 units.append(cur)
                 cur = ""
         elif attach or not cur:
@@ -486,9 +489,14 @@ def bunsetsu_split(text: str) -> list[str]:
     return units
 
 
-def pack_units(para_units: list[list[str]], max_len: int) -> list[str]:
-    """文節リストを、1 行(列) max_len 文字以内になるよう貪欲に詰める。文節は分割しない。"""
+def pack_units(para_units: list[list[str]], max_len: int) -> tuple[list[str], int]:
+    """文節リストを 1 行(列) max_len 文字以内に貪欲に詰める。文節は分割しない。
+
+    戻り値は (行リスト, 句読点以外で改行した回数)。後者はペナルティ計算に使う。
+    段落境界（明示改行）はユーザー指定なのでペナルティに数えない。
+    """
     lines: list[str] = []
+    unnatural = 0
     for units in para_units:
         if not units:
             lines.append("")
@@ -497,12 +505,14 @@ def pack_units(para_units: list[list[str]], max_len: int) -> list[str]:
         for u in units:
             if cur and len(cur) + len(u) > max_len:
                 lines.append(cur)
+                if cur[-1] not in BREAK_PUNCT:   # 句読点以外で切った＝やや不自然
+                    unnatural += 1
                 cur = u
             else:
                 cur += u
         if cur:
             lines.append(cur)
-    return lines or [""]
+    return (lines or [""]), unnatural
 
 
 def text_block_size(layout: list[str], args, font) -> tuple[float, float]:
@@ -560,38 +570,149 @@ def parse_aspect(s: str) -> float:
     return float(s)
 
 
+def flatten_units(text: str):
+    """文節へ分割し、段落境界（明示改行）を強制改行として平坦化する。
+
+    戻り値: (units, forced_after, has_empty_para)
+      forced_after[k] が True なら units[k] の直後で必ず改行する（段落区切り）。
+    """
+    paras = [bunsetsu_split(p) for p in text.split("\n")]
+    has_empty = any(len(p) == 0 for p in paras)
+    units: list[str] = []
+    forced_after: list[bool] = []
+    for pi, p in enumerate(paras):
+        for u in p:
+            units.append(u)
+            forced_after.append(False)
+        if pi < len(paras) - 1 and units:
+            forced_after[-1] = True  # 段落の最後の文節の後で強制改行
+    return units, forced_after, has_empty
+
+
+def dp_line_break(units, forced_after, break_penalty: float):
+    """全分割を考慮する DP。各行数 n について最適な分割（句読点以外の改行を最小→行長を均等）を求める。
+
+    コスト = Σ(行長^2)  ＋  (句読点以外で改行した回数) × BIG
+    BIG を行長^2 の総和より十分大きく取ることで、まず不自然な改行を最小化し、
+    その範囲で行長のばらつき（二乗和）を最小化する。break_penalty=0 なら均等化のみ。
+    """
+    m = len(units)
+    length = [len(u) for u in units]
+    pre = [0] * (m + 1)
+    for i in range(m):
+        pre[i + 1] = pre[i] + length[i]
+    big = 10 ** 7 if break_penalty > 0 else 0
+    inf = float("inf")
+    # dp[k][i] = (cost, 直前の区切り位置 j)。先頭 i 文節を k 行に分割。
+    dp = [[(inf, -1)] * (m + 1) for _ in range(m + 1)]
+    dp[0][0] = (0.0, -1)
+    for k in range(1, m + 1):
+        for i in range(1, m + 1):
+            best = (inf, -1)
+            # 最後の行 = units[j:i]。j を i-1 から左へ。途中に強制改行があれば打ち切り。
+            for j in range(i - 1, -1, -1):
+                if j < i - 1 and forced_after[j]:
+                    break
+                base = dp[k - 1][j][0]
+                if base < inf:
+                    seglen = pre[i] - pre[j]
+                    cost = base + seglen * seglen
+                    if i < m and units[i - 1][-1] not in BREAK_PUNCT:
+                        cost += big  # この行の後ろは（最終行でなく）句読点以外での改行
+                    if cost < best[0]:
+                        best = (cost, j)
+            dp[k][i] = best
+    return dp
+
+
+def dp_reconstruct(dp, units, n: int) -> list[str]:
+    m = len(units)
+    segs = []
+    i, k = m, n
+    while k > 0:
+        j = dp[k][i][1]
+        segs.append("".join(units[j:i]))
+        i, k = j, k - 1
+    segs.reverse()
+    return segs
+
+
+def count_unnatural(layout: list[str]) -> int:
+    """最終行を除く各行末が句読点でない＝不自然な改行の回数。"""
+    return sum(1 for ln in layout[:-1] if ln and ln[-1] not in BREAK_PUNCT)
+
+
 def auto_layout(text: str, args, font) -> list[str]:
-    """文節で区切り、最終画像の縦横比が --aspect に最も近くなる折り返しを選ぶ。"""
+    """文節で区切り、縦横比が --aspect に近く、かつ句読点以外での改行が少ない折り返しを選ぶ。"""
     target = parse_aspect(args.aspect)  # 縦/横
-    para_units = [bunsetsu_split(p) for p in text.split("\n")]
-    total = sum(len(u) for units in para_units for u in units)
-    if total == 0:
+    units, forced_after, has_empty = flatten_units(text)
+    if not units:
         return [""]
+    if has_empty:  # 空段落を含むときは従来の貪欲法にフォールバック
+        return _greedy_auto(text, args, font, target)
+    m = len(units)
+    dp = dp_line_break(units, forced_after, args.break_penalty)
+    inf = float("inf")
     best = None
-    for max_len in range(1, total + 1):
-        layout = pack_units(para_units, max_len)
+    for n in range(1, m + 1):
+        if dp[n][m][0] == inf:
+            continue
+        layout = dp_reconstruct(dp, units, n)
+        unnatural = count_unnatural(layout)
         tw, th = text_block_size(layout, args, font)
         cw, ch = predicted_canvas(tw, th, args)
-        score = abs(ch / cw - target)
+        score = abs(ch / cw - target) + args.break_penalty * unnatural
         if best is None or score < best[0]:
             best = (score, layout)
     return best[1]
 
 
-def layout_n_lines(text: str, n: int) -> list[str]:
-    """文節で区切り、指定した行数(縦書きでは列数) n に収まるよう均等に詰める。"""
-    para_units = [bunsetsu_split(p) for p in text.split("\n")]
+def layout_n_lines(text: str, n: int, break_penalty: float = 0.0) -> list[str]:
+    """文節で区切り、指定行数(縦書きでは列数) n に収め、句読点以外での改行を避ける。"""
+    units, forced_after, has_empty = flatten_units(text)
+    if not units:
+        return [""]
+    if has_empty:
+        para_units = [bunsetsu_split(p) for p in text.split("\n")]
+        return _greedy_n_lines(para_units, n, break_penalty)
+    m = len(units)
+    dp = dp_line_break(units, forced_after, break_penalty)
+    inf = float("inf")
+    feasible = [k for k in range(1, m + 1) if dp[k][m][0] < inf]
+    # n 行ちょうどが作れなければ、最も近い行数を選ぶ
+    target_n = min(feasible, key=lambda k: abs(k - n))
+    return dp_reconstruct(dp, units, target_n)
+
+
+def _greedy_n_lines(para_units, n: int, break_penalty: float) -> list[str]:
+    """空段落を含む等の特殊ケース用の、貪欲な行数合わせ（フォールバック）。"""
     total = sum(len(u) for units in para_units for u in units)
     if total == 0:
         return [""]
-    # 行数が n 以下になる最小の幅＝最もバランスの良い詰め方
-    chosen = pack_units(para_units, total)
+    candidates = []
     for max_len in range(1, total + 1):
-        layout = pack_units(para_units, max_len)
-        if len(layout) <= n:
-            chosen = layout
-            break
-    return chosen
+        layout, unnatural = pack_units(para_units, max_len)
+        candidates.append((layout, unnatural, max((len(x) for x in layout), default=0)))
+    exact = [c for c in candidates if len(c[0]) == n]
+    if exact:
+        key = (lambda c: (c[1], c[2])) if break_penalty > 0 else (lambda c: c[2])
+        return min(exact, key=key)[0]
+    return min(candidates, key=lambda c: (abs(len(c[0]) - n), c[1]))[0]
+
+
+def _greedy_auto(text, args, font, target) -> list[str]:
+    """空段落を含む等の特殊ケース用の、貪欲なアスペクト探索（フォールバック）。"""
+    para_units = [bunsetsu_split(p) for p in text.split("\n")]
+    total = sum(len(u) for units in para_units for u in units)
+    best = None
+    for max_len in range(1, total + 1):
+        layout, unnatural = pack_units(para_units, max_len)
+        tw, th = text_block_size(layout, args, font)
+        cw, ch = predicted_canvas(tw, th, args)
+        score = abs(ch / cw - target) + args.break_penalty * unnatural
+        if best is None or score < best[0]:
+            best = (score, layout)
+    return best[1] if best else [""]
 
 
 # ---------------------------------------------------------------------------
@@ -603,7 +724,7 @@ def build_image(args) -> Image.Image:
 
     # 行(列)の決定：行数指定 > 自動改行 > 手動の max-chars 折り返し
     if args.lines is not None:
-        layout = layout_n_lines(args.text, args.lines)
+        layout = layout_n_lines(args.text, args.lines, args.break_penalty)
     elif args.auto_wrap:
         layout = auto_layout(args.text, args, font)
     elif args.vertical:
@@ -702,6 +823,8 @@ def parse_args(argv=None):
                    help="自動改行時の目標縦横比（横:縦、例 3:5 は幅3・高さ5の縦長）。--auto-wrap と併用")
     p.add_argument("--lines", type=int, default=None,
                    help="行数（縦書きでは列数）を指定して文節で自動改行。指定すると --aspect より優先")
+    p.add_argument("--break-penalty", type=float, default=0.15,
+                   help="句読点以外での改行1回あたりのペナルティ（自動改行の探索に加算）。0で無効")
     p.add_argument("--line-width", type=int, default=4, help="輪郭線の太さ(px)")
     p.add_argument("--padding", type=int, default=28, help="文字と縁の余白(px)")
     p.add_argument("--line-gap", type=float, default=1.1, help="横書きの行間倍率")
