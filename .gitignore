@@ -1,0 +1,7 @@
+# Python
+__pycache__/
+*.pyc
+
+# 生成物（デフォルト出力名）
+/bubble.png
+/out.png
