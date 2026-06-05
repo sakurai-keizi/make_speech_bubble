@@ -537,7 +537,8 @@ def parse_args(argv=None):
     p.add_argument("--char-gap", type=float, default=1.15, help="縦書きの字間倍率")
     p.add_argument("--col-gap", type=float, default=1.4, help="縦書きの列間倍率")
     # 手書き風(--shape hand)用
-    p.add_argument("--seed", type=int, default=7, help="手書き風の乱数シード（揺れ方が変わる）")
+    p.add_argument("--seed", type=int, default=None,
+                   help="手書き風の乱数シード（揺れ方が変わる）。未指定なら実行ごとにランダム")
     p.add_argument("--wobble", type=float, default=1.0, help="手書き風の輪郭の揺れ量")
     p.add_argument("--strokes", type=int, default=2, help="手書き風の線の重ね描き回数")
     p.add_argument("--no-trim", dest="trim", action="store_false",
@@ -550,10 +551,18 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     # コマンドラインで渡された "\n"（2文字）を実際の改行に変換
     args.text = args.text.replace("\\n", "\n")
+    # --seed 未指定なら実行ごとにランダム（後で再現できるよう値を表示）
+    random_seed = args.seed is None
+    if random_seed:
+        args.seed = random.randrange(1_000_000)
     img = build_image(args)
     out = Path(args.output)
     img.save(out)
-    print(f"保存しました: {out}  ({img.width}x{img.height}, RGBA)")
+    msg = f"保存しました: {out}  ({img.width}x{img.height}, RGBA)"
+    if args.shape == "hand":
+        note = "ランダム" if random_seed else "指定"
+        msg += f"  [seed={args.seed} ({note})]"
+    print(msg)
     return 0
 
 
