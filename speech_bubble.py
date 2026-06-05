@@ -47,7 +47,10 @@ FONT_CANDIDATES = [
 VERTICAL_ROTATE = set("ー－—–~〜（）()「」『』【】〔〕[]｛｝{}…‥")
 # 縦書きでマスの右上へ寄せたい文字（句読点＋小書き仮名：拗音・促音・小書き母音など）
 _SMALL_KANA = "ぁぃぅぇぉっゃゅょゎゕゖ" + "ァィゥェォッャュョヮヵヶ" + "ｧｨｩｪｫｬｭｮｯ"
+SMALL_KANA = set(_SMALL_KANA)
 VERTICAL_SHIFT = set("、。，．" + _SMALL_KANA)
+# 小書き仮名の直後は送りを詰めて、次の文字を少し上から書き始める割合（マス高さ比）
+SMALL_KANA_TIGHTEN = 0.18
 
 
 def load_font(size: int, font_path: str | None = None, index: int = 0) -> ImageFont.FreeTypeFont:
@@ -184,7 +187,8 @@ def draw_vertical(
                 bb = font.getbbox(ch)
                 draw.text((dx - bb[0], dy - bb[1]), ch, font=font, fill=fill,
                           stroke_width=stroke, stroke_fill=fill)
-            y += cell
+            # 小書き仮名の直後は送りを詰めて、次の文字を少し上から書き始める
+            y += cell - (cell * SMALL_KANA_TIGHTEN if ch in SMALL_KANA else 0)
 
 
 # ---------------------------------------------------------------------------
