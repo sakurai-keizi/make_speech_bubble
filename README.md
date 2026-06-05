@@ -18,6 +18,7 @@
 - [uv](https://docs.astral.sh/uv/)（依存パッケージは自動でインストールされます）
 - 日本語フォント（**Noto Sans CJK** 推奨）
   - Debian/Ubuntu: `sudo apt install fonts-noto-cjk`
+  - システムに無くても、`--font` でフォントファイルを直接指定できます
 
 依存パッケージ（Pillow）はスクリプト先頭の [PEP 723](https://peps.python.org/pep-0723/) インラインメタデータに記載されており、`uv run` 実行時に自動で用意されます。手動インストールは不要です。
 
@@ -35,6 +36,10 @@ uv run speech_bubble.py "こんにちは！\n元気ですか？" --shape hand --
 
 # しっぽの位置を時計の時間で指定（1.5時=右上）
 uv run speech_bubble.py "こっち！" --shape hand --tail-clock 1.5
+
+# 好きなフォントを指定（.ttc はフォント番号も指定可）
+uv run speech_bubble.py "好きな書体で" --font /path/to/font.otf
+uv run speech_bubble.py "明朝体で" --font /usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc --font-index 3
 
 # 縦書き
 uv run speech_bubble.py "なるほど…\nそういうことか" --vertical
@@ -56,6 +61,8 @@ uv run speech_bubble.py "うわあああ！" --shape jagged --tail bottom-right 
 | `--tail-clock` | しっぽの位置を時計の時間で指定（`12`=上, `3`=右, `6`=下, `9`=左。`4.5` など小数可）。指定すると `--tail` より優先 | （未指定） |
 | `--tail-scale` | しっぽの大きさ倍率 | `1.0` |
 | `--vertical` | 縦書きにする | （横書き） |
+| `--font` | 使用するフォントファイル(`.ttf`/`.otf`/`.ttc`)のパス。未指定ならシステムの日本語フォントを自動検出 | （自動検出） |
+| `--font-index` | フォントコレクション(`.ttc`)内のフォント番号 | `0` |
 | `--font-size` | フォントサイズ(px) | `48` |
 | `--max-chars` | 1 行（列）の最大文字数で自動折り返し | `8` |
 | `--line-width` | 輪郭線の太さ(px) | `4` |

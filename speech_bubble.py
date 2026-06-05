@@ -13,6 +13,7 @@
     uv run speech_bubble.py "だめだ！" --tail bottom-left --font-size 64
     uv run speech_bubble.py "手書き風！" --shape hand --seed 3
     uv run speech_bubble.py "こっち！" --shape hand --tail-clock 1.5
+    uv run speech_bubble.py "好きな書体で" --font /path/to/font.otf
 """
 from __future__ import annotations
 
@@ -41,12 +42,22 @@ VERTICAL_ROTATE = set("ー－—–~〜（）()「」『』【】〔〕[]｛｝{
 VERTICAL_SHIFT = set("、。，．")
 
 
-def load_font(size: int) -> ImageFont.FreeTypeFont:
-    for path, index in FONT_CANDIDATES:
+def load_font(size: int, font_path: str | None = None, index: int = 0) -> ImageFont.FreeTypeFont:
+    # --font が指定されていればそれを優先
+    if font_path:
+        if not Path(font_path).exists():
+            raise SystemExit(f"フォントファイルが見つかりません: {font_path}")
+        try:
+            return ImageFont.truetype(font_path, size=size, index=index)
+        except OSError as e:
+            raise SystemExit(f"フォントを読み込めませんでした: {font_path} ({e})")
+    # 未指定ならシステムの日本語フォントを自動検出
+    for path, idx in FONT_CANDIDATES:
         if Path(path).exists():
-            return ImageFont.truetype(path, size=size, index=index)
+            return ImageFont.truetype(path, size=size, index=idx)
     raise SystemExit(
-        "日本語フォントが見つかりませんでした。Noto Sans CJK 等を入れてください。\n"
+        "日本語フォントが見つかりませんでした。--font でファイルを指定するか、"
+        "Noto Sans CJK 等を入れてください。\n"
         "  Debian/Ubuntu: sudo apt install fonts-noto-cjk"
     )
 
@@ -420,7 +431,7 @@ def merge_tail(
 # メイン
 # ---------------------------------------------------------------------------
 def build_image(args) -> Image.Image:
-    font = load_font(args.font_size)
+    font = load_font(args.font_size, args.font, args.font_index)
     pad = args.padding
     margin = max(args.line_width * 3, int(args.font_size * 0.6)) + args.padding
 
@@ -511,6 +522,10 @@ def parse_args(argv=None):
                    help="しっぽの位置を時計の時間で指定（12=上, 3=右, 6=下, 9=左。例: 4.5）。--tail より優先")
     p.add_argument("--tail-scale", type=float, default=1.0, help="しっぽの大きさ倍率")
     p.add_argument("--vertical", action="store_true", help="縦書きにする")
+    p.add_argument("--font", default=None,
+                   help="使用するフォントファイル(.ttf/.otf/.ttc)のパス。未指定ならシステムの日本語フォントを自動検出")
+    p.add_argument("--font-index", type=int, default=0,
+                   help="フォントコレクション(.ttc)内のフォント番号")
     p.add_argument("--font-size", type=int, default=48, help="フォントサイズ(px)")
     p.add_argument("--max-chars", type=int, default=8, help="1 行(列)の最大文字数")
     p.add_argument("--line-width", type=int, default=4, help="輪郭線の太さ(px)")
