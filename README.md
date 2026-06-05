@@ -12,7 +12,7 @@
 - 吹き出しの形を 6 種類から選択。**手書き風 (`hand`)** はペン入れ風のゆらいだ輪郭。
 - しっぽ（出っ張り）の向き・大きさを指定可能。手書き風は本体としっぽが継ぎ目なく一体化。
 - システムの **Noto Sans CJK** を自動検出して使用。
-- 文節・句読点で自動改行し、画像の縦横比を目標値（既定 3:5）に近づける機能（`--auto-wrap`）。
+- 文節・句読点で**自動改行**（既定でON）。画像の縦横比を目標値（既定 3:5）に近づけ、句読点優先で改行します。
 
 ## 必要なもの
 
@@ -26,21 +26,24 @@
 ## 使い方
 
 ```bash
-# 一番シンプル（縦書き・手書き風・下しっぽ）→ bubble.png を出力
-uv run speech_bubble.py "こんにちは！"
+# 一番シンプル（縦書き・手書き風・文節で自動改行）→ bubble.png を出力
+# 既定で文節・句読点で自動改行し、縦横比を 3:5（横:縦）に近づける
+uv run speech_bubble.py "今日はいい天気ですね、散歩に行きましょう。"
 
-# 改行は \n で。出力先は -o で指定
-uv run speech_bubble.py "こんにちは！\n元気ですか？" -o out.png
+# 出力先は -o で指定。明示改行したいときは \n
+uv run speech_bubble.py "前半です。\n後半もあります。" -o out.png
+
+# 目標の縦横比を変える
+uv run speech_bubble.py "長い文章も自動でいい感じに改行します。" --aspect 4:5
+
+# 行数（縦書きでは列数）を指定（アスペクト比は無視）
+uv run speech_bubble.py "今日はいい天気ですね、散歩に行きましょう。" --lines 3
+
+# 自動改行を切って手動の文字数折り返しに戻す
+uv run speech_bubble.py "あいうえおかきくけこ" --no-auto-wrap --max-chars 5
 
 # 形を変える（楕円など）
-uv run speech_bubble.py "こんにちは！\n元気ですか？" --shape ellipse
-
-# 文節・句読点で自動改行し、縦横比を 3:5（横:縦）に近づける
-uv run speech_bubble.py "今日はいい天気ですね、散歩に行きましょう。" --auto-wrap
-uv run speech_bubble.py "長い文章も自動でいい感じに改行します。" --auto-wrap --aspect 4:5
-
-# 行数（縦書きでは列数）を指定して文節で自動改行（アスペクト比は無視）
-uv run speech_bubble.py "今日はいい天気ですね、散歩に行きましょう。" --lines 3
+uv run speech_bubble.py "今日はいい天気。" --shape ellipse
 
 # しっぽの位置を時計の時間で指定（1.5時=右上）
 uv run speech_bubble.py "こっち！" --tail-clock 1.5
@@ -79,7 +82,7 @@ uv run speech_bubble.py "うわあああ！" --shape jagged --tail bottom-right 
 | `--bold` | 太字にする（文字の輪郭を太らせる合成ボールド。どのフォントでも有効） | （通常） |
 | `--bold-width` | 太字の太さ(px)を直接指定（`--bold` より優先） | （自動） |
 | `--max-chars` | 1 行（列）の最大文字数で折り返し（手動折り返し時） | `8` |
-| `--auto-wrap` | 文節・句読点で自動改行し、画像の縦横比を `--aspect` に近づける | （手動） |
+| `--auto-wrap` / `--no-auto-wrap` | 文節・句読点で自動改行し、画像の縦横比を `--aspect` に近づける。`--no-auto-wrap` で手動の `--max-chars` 折り返しに戻す | 自動改行 |
 | `--aspect` | 自動改行時の目標縦横比（`横:縦`。`3:5` は幅3・高さ5の縦長） | `3:5` |
 | `--lines` | 行数（縦書きでは列数）を指定して文節で自動改行（`--aspect` より優先） | （未指定） |
 | `--break-penalty` | 句読点以外での改行1回あたりのペナルティ（自動改行の最適化に加算）。`0` で無効 | `0.15` |

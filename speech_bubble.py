@@ -7,8 +7,8 @@
 # ///
 """日本語テキストを漫画風の吹き出し画像（背景透過 PNG）にして出力する。
 
-使い方の例（デフォルトは縦書き・手書き風）:
-    uv run speech_bubble.py "こんにちは！"
+使い方の例（デフォルトは縦書き・手書き風・文節で自動改行）:
+    uv run speech_bubble.py "今日はいい天気ですね、散歩に行きましょう。"
     uv run speech_bubble.py "やったー！" -o out.png --shape ellipse
     uv run speech_bubble.py "なるほど…" --horizontal --shape jagged
     uv run speech_bubble.py "だめだ！" --tail bottom-left --font-size 64
@@ -16,8 +16,8 @@
     uv run speech_bubble.py "こっち！" --shape hand --tail-clock 1.5
     uv run speech_bubble.py "好きな書体で" --font /path/to/font.otf
     uv run speech_bubble.py "強調！" --bold
-    uv run speech_bubble.py "今日はいい天気ですね、散歩に行きましょう。" --auto-wrap
-    uv run speech_bubble.py "今日はいい天気ですね、散歩に行きましょう。" --lines 3
+    uv run speech_bubble.py "行数を指定" --lines 3
+    uv run speech_bubble.py "自動改行を切る" --no-auto-wrap --max-chars 5
 """
 from __future__ import annotations
 
@@ -816,9 +816,11 @@ def parse_args(argv=None):
                    help="太字にする（文字の輪郭を太らせる合成ボールド。どのフォントでも有効）")
     p.add_argument("--bold-width", type=int, default=None,
                    help="太字の太さ(px)を直接指定（指定すると --bold より優先）")
-    p.add_argument("--max-chars", type=int, default=8, help="1 行(列)の最大文字数（手動折り返し時）")
-    p.add_argument("--auto-wrap", action="store_true",
-                   help="文節・句読点で区切って自動改行し、画像の縦横比を --aspect に近づける")
+    p.add_argument("--max-chars", type=int, default=8,
+                   help="1 行(列)の最大文字数（--no-auto-wrap の手動折り返し時のみ）")
+    p.add_argument("--auto-wrap", action=argparse.BooleanOptionalAction, default=True,
+                   help="文節・句読点で区切って自動改行し、画像の縦横比を --aspect に近づける（デフォルト）。"
+                        "手動の --max-chars 折り返しに戻すには --no-auto-wrap")
     p.add_argument("--aspect", default="3:5",
                    help="自動改行時の目標縦横比（横:縦、例 3:5 は幅3・高さ5の縦長）。--auto-wrap と併用")
     p.add_argument("--lines", type=int, default=None,
