@@ -115,6 +115,17 @@ def draw_horizontal(
         y += line_h
 
 
+def render_glyph(ch, font, fill, stroke):
+    """1 文字を透明な一時画像に描き、(画像, 実インクの外接矩形) を返す。空なら bbox は None。"""
+    size = font.size
+    pad = size * 2 + stroke * 2
+    tmp = Image.new("RGBA", (pad, pad), (0, 0, 0, 0))
+    td = ImageDraw.Draw(tmp)
+    td.text((size * 0.5, size * 0.5), ch, font=font, fill=fill,
+            stroke_width=stroke, stroke_fill=fill)
+    return tmp, tmp.getbbox()
+
+
 def draw_vertical(
     draw: ImageDraw.ImageDraw,
     columns: list[str],
@@ -153,12 +164,19 @@ def draw_vertical(
                         stroke_width=stroke, stroke_fill=fill)
                 tmp = tmp.rotate(-90, expand=False)
                 draw._image.paste(tmp, (int(x - pad / 2 + cell / 2), int(y)), tmp)
+            elif ch in VERTICAL_SHIFT:
+                # 句読点は原稿用紙の作法で、マス（≒全角枠）の右上クォドラントへ
+                tmp, ink = render_glyph(ch, font, fill, stroke)
+                if ink:
+                    iw, ih = ink[2] - ink[0], ink[3] - ink[1]
+                    qx = x + size / 4                       # 右上クォドラントの中心(横)
+                    qy = y + (cell - size) / 2 + size / 4   # 右上クォドラントの中心(縦)
+                    px = qx - iw / 2 - ink[0]
+                    py = qy - ih / 2 - ink[1]
+                    draw._image.paste(tmp, (int(px), int(py)), tmp)
             else:
                 dx = x - cw / 2
                 dy = y + (cell - chh) / 2
-                if ch in VERTICAL_SHIFT:
-                    dx += cell * 0.25
-                    dy -= cell * 0.25
                 bb = font.getbbox(ch)
                 draw.text((dx - bb[0], dy - bb[1]), ch, font=font, fill=fill,
                           stroke_width=stroke, stroke_fill=fill)
