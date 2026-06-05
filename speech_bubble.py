@@ -3,6 +3,7 @@
 # dependencies = [
 #   "Pillow>=10.0",
 #   "Janome>=0.5",
+#   "pyperclip>=1.8",
 # ]
 # ///
 """日本語テキストを漫画風の吹き出し画像（背景透過 PNG）にして出力する。
@@ -815,7 +816,8 @@ def parse_args(argv=None):
         description="日本語テキストを漫画風の吹き出し画像（背景透過 PNG）にする。",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("text", help="吹き出しに入れる日本語テキスト（\\n で改行）")
+    p.add_argument("text", nargs="?", default=None,
+                   help="吹き出しに入れる日本語テキスト（\\n で改行）。省略時はクリップボードの文字列を使う")
     p.add_argument("-o", "--output", default="bubble.png", help="出力ファイルパス")
     p.add_argument("--shape", default="hand",
                    choices=["ellipse", "rounded", "rectangle", "jagged", "burst", "hand"],
@@ -869,8 +871,26 @@ def parse_args(argv=None):
     return p.parse_args(argv)
 
 
+def get_clipboard_text() -> str:
+    """クリップボードの文字列を返す。取得できなければ空文字。"""
+    try:
+        import pyperclip
+        return (pyperclip.paste() or "").strip()
+    except Exception:
+        return ""
+
+
 def main(argv=None) -> int:
     args = parse_args(argv)
+    # セリフ未指定ならクリップボードから取得
+    if args.text is None:
+        args.text = get_clipboard_text()
+        if not args.text:
+            raise SystemExit(
+                "セリフが指定されておらず、クリップボードも空でした。\n"
+                "  テキストを引数で渡すか、クリップボードに文字列をコピーしてください。"
+            )
+        print(f"クリップボードのテキストを使用: {args.text!r}")
     # コマンドラインで渡された "\n"（2文字）を実際の改行に変換
     args.text = args.text.replace("\\n", "\n")
     # --seed 未指定なら実行ごとにランダム（後で再現できるよう値を表示）
